@@ -1,5 +1,5 @@
 // src/pages/ProductPage.jsx
-// 商品詳細画面
+// 商品詳細画面（輸入元用アプリのため スライダーあり）
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useSimpleCart } from "../cart/simpleCart";
