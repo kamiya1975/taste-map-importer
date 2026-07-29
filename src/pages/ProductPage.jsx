@@ -435,6 +435,25 @@ function formatProductionYearTaste(value) {
 }
 
 /** =========================
+ *  bubble値をスライダー用の0〜100へ整える
+ * - null / undefined / 空文字 / 不正値は50
+ * - 0〜100の範囲外は端の値へ丸める
+ * ========================= */
+function normalizeBubbleValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return 50;
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 50;
+  }
+
+  return Math.min(100, Math.max(0, numericValue));
+}
+
+/** =========================
  *  商品説明セクション
  * ========================= */
 function ProductInfoSection({ product, jan_code }) {
@@ -615,6 +634,14 @@ export default function ProductPage() {
   const [wish, setWish] = useState(false);
   const [clusterId, setClusterId] = useState(null);
 
+  // 輸入元アプリ用：商品ごとのbubble値
+  // bubble_1 = ボディ
+  // bubble_2 = 甘味
+  // bubble_3 = 酸味
+  const [bubbleBody, setBubbleBody] = useState(50);
+  const [bubbleSweetness, setBubbleSweetness] = useState(50);
+  const [bubbleAcid, setBubbleAcid] = useState(50);
+
   const { search, hash } = useLocation();
   // MapPage が iframe src に付与している ctx を受け取る（店舗コンテキスト混入対策）
   const ctxFromQuery = React.useMemo(() => {
@@ -774,6 +801,11 @@ export default function ProductPage() {
       setLoading(true);
       setProduct(null);
 
+      // 商品切替時に、直前の商品値が残らないよう初期化
+      setBubbleBody(50);
+      setBubbleSweetness(50);
+      setBubbleAcid(50);
+
       //2026.07.店舗QR用
       // 商品APIへ渡す店舗IDの優先順位
       // 1. iframe URLの store_id（現在表示中の店舗文脈）
@@ -867,6 +899,12 @@ export default function ProductPage() {
           if (!cancelled) {
             if (seq !== fetchSeqRef.current) return;
             setProduct(data);
+
+            // API値を商品詳細スライダーの初期値へ反映
+            setBubbleBody(normalizeBubbleValue(data?.bubble_1));
+            setBubbleSweetness(normalizeBubbleValue(data?.bubble_2));
+            setBubbleAcid(normalizeBubbleValue(data?.bubble_3));
+
             setLoading(false);
           }
         }
@@ -1437,6 +1475,86 @@ export default function ProductPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 輸入元アプリ用：味わい調整スライダー */}
+      <div
+        style={{
+          marginTop: 20,
+          padding: "14px 0",
+          borderBottom: "1px solid #ccc",
+        }}
+      >
+        {[
+          {
+            key: "acid",
+            label: "酸味",
+            value: bubbleAcid,
+            onChange: setBubbleAcid,
+          },
+          {
+            key: "sweetness",
+            label: "甘味",
+            value: bubbleSweetness,
+            onChange: setBubbleSweetness,
+          },
+          {
+            key: "body",
+            label: "ボディ",
+            value: bubbleBody,
+            onChange: setBubbleBody,
+          },
+        ].map((slider, index) => (
+          <div
+            key={slider.key}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginTop: index === 0 ? 0 : 14,
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                flexShrink: 0,
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              {slider.label}
+            </div>
+
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(slider.value)}
+              onChange={(e) => {
+                slider.onChange(Number(e.target.value));
+              }}
+              aria-label={slider.label}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                cursor: "pointer",
+              }}
+            />
+
+            <div
+              style={{
+                width: 32,
+                flexShrink: 0,
+                textAlign: "right",
+                fontSize: 14,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {Math.round(slider.value)}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* 説明＋基本情報 */}
