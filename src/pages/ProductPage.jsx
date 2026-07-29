@@ -1536,8 +1536,8 @@ export default function ProductPage() {
               style={{
                 width: 48,
                 flexShrink: 0,
-                fontSize: 16,
-                fontWeight: 600,
+                fontSize: 14,
+                fontWeight: 200,
                 color: "#555",
               }}
             >
@@ -1567,8 +1567,8 @@ export default function ProductPage() {
                 width: 36,
                 flexShrink: 0,
                 textAlign: "right",
-                fontSize: 18,
-                fontWeight: 600,
+                fontSize: 14,
+                fontWeight: 200,
                 color: "#555",
                 fontVariantNumeric: "tabular-nums",
               }}
