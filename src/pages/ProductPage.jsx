@@ -472,6 +472,115 @@ function productTasteSliderGradient(value) {
 }
 
 /** =========================
+ *  数値変換
+ * - null / undefined / 空文字 / 不正値は null
+ * - 0 は有効値
+ * ========================= */
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+
+  return Number.isFinite(numericValue)
+    ? numericValue
+    : null;
+}
+
+/** =========================
+ *  風味データ1行からJANを取得
+ * ========================= */
+function getTasteMapPointJan(row) {
+  return String(
+    row?.jan_code ??
+    row?.JAN ??
+    row?.jan ??
+    ""
+  ).trim();
+}
+
+/** =========================
+ *  bubble空間で最も近い商品を検索
+ *  - bubble_1 = ボディ
+ *  - bubble_2 = 甘味
+ *  - bubble_3 = 酸味
+ *  - PC値は使用しない
+ * ========================= */
+function findNearestWineByBubble(
+  rows,
+  {
+    body,
+    sweetness,
+    acid,
+  }
+) {
+  const targetBody = toFiniteNumber(body);
+  const targetSweetness = toFiniteNumber(sweetness);
+  const targetAcid = toFiniteNumber(acid);
+
+  if (
+    targetBody === null ||
+    targetSweetness === null ||
+    targetAcid === null
+  ) {
+    return null;
+  }
+
+  let nearest = null;
+  let minimumDistanceSquared = Infinity;
+
+  for (const row of rows || []) {
+    const jan = getTasteMapPointJan(row);
+
+    const bubble1 = toFiniteNumber(row?.bubble_1);
+    const bubble2 = toFiniteNumber(row?.bubble_2);
+    const bubble3 = toFiniteNumber(row?.bubble_3);
+
+    const umapX = toFiniteNumber(
+      row?.umap_x ?? row?.UMAP_X
+    );
+    const umapY = toFiniteNumber(
+      row?.umap_y ?? row?.UMAP_Y
+    );
+
+    // JAN、bubble値、UMAP座標が揃っていない商品は検索対象外
+    if (
+      !jan ||
+      bubble1 === null ||
+      bubble2 === null ||
+      bubble3 === null ||
+      umapX === null ||
+      umapY === null
+    ) {
+      continue;
+    }
+
+    const distanceSquared =
+      (targetBody - bubble1) ** 2 +
+      (targetSweetness - bubble2) ** 2 +
+      (targetAcid - bubble3) ** 2;
+
+    if (distanceSquared < minimumDistanceSquared) {
+      minimumDistanceSquared = distanceSquared;
+
+      nearest = {
+        row,
+        jan,
+        umapX,
+        umapY,
+        bubble1,
+        bubble2,
+        bubble3,
+        distanceSquared,
+      };
+    }
+  }
+
+  return nearest;
+}
+
+/** =========================
  *  商品説明セクション
  * ========================= */
 function ProductInfoSection({ product, jan_code }) {
@@ -659,6 +768,11 @@ export default function ProductPage() {
   const [bubbleBody, setBubbleBody] = useState(50);
   const [bubbleSweetness, setBubbleSweetness] = useState(50);
   const [bubbleAcid, setBubbleAcid] = useState(50);
+
+  // bubble最近傍検索に使用する全商品の風味データ
+  const [tasteMapPoints, setTasteMapPoints] = useState([]);
+  // MAP遷移ボタンの連打防止
+  const [movingToMap, setMovingToMap] = useState(false);
 
   const { search, hash } = useLocation();
   // MapPage が iframe src に付与している ctx を受け取る（店舗コンテキスト混入対策）
@@ -987,55 +1101,96 @@ export default function ProductPage() {
     storeIdFromQuery,
   ]);
 
-  // 風味データ（umapData or JSON）から cluster を取得
+  // 風味データ（umapData or JSON）を読み込み、
+  // bubble最近傍検索用データと現在商品のclusterを取得
   useEffect(() => {
     if (!jan_code) return;
 
     let cancelled = false;
+    const controller = new AbortController();
 
-    const findCluster = async () => {
-      // 1) まず MapPage が保存した umapData を見る
+    const applyRows = (rows) => {
+      if (cancelled) return false;
+
+      const normalizedRows = Array.isArray(rows)
+        ? rows
+        : [];
+
+      setTasteMapPoints(normalizedRows);
+
+      const hit = normalizedRows.find(
+        (row) =>
+          getTasteMapPointJan(row) === String(jan_code)
+      );
+
+      if (
+        hit &&
+        Number.isFinite(Number(hit.cluster))
+      ) {
+        setClusterId(Number(hit.cluster));
+      } else {
+        setClusterId(null);
+      }
+
+      return normalizedRows.length > 0;
+    };
+
+    const loadTasteMapPoints = async () => {
+      // 1) MapPageが保存したumapDataを先に確認
       try {
         const raw = localStorage.getItem("umapData");
+
         if (raw) {
-          const arr = JSON.parse(raw);
-          const hit = (arr || []).find(
-            (r) => String(r.jan_code || r.JAN) === String(jan_code)
-          );
-          if (hit && Number.isFinite(Number(hit.cluster))) {
-            if (!cancelled) setClusterId(Number(hit.cluster));
+          const storedRows = JSON.parse(raw);
+
+          if (Array.isArray(storedRows) && storedRows.length > 0) {
+            applyRows(storedRows);
             return;
           }
         }
       } catch (e) {
-        console.warn("ProductPage: umapData 読み込み失敗:", e);
+        console.warn(
+          "ProductPage: umapData 読み込み失敗:",
+          e
+        );
       }
 
-      // 2) なければ風味データJSONを直接 fetch
+      // 2) umapDataがなければ風味データJSONを取得
       try {
-        const res = await fetch(TASTEMAP_POINTS_URL);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch(TASTEMAP_POINTS_URL, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
         const rows = await res.json();
+
         if (cancelled) return;
 
-        const hit = (rows || []).find(
-          (r) => String(r.jan_code || r.JAN) === String(jan_code)
+        applyRows(rows);
+      } catch (e) {
+        if (e?.name === "AbortError") return;
+
+        console.error(
+          "ProductPage: 風味データ取得に失敗:",
+          e
         );
-        if (hit && Number.isFinite(Number(hit.cluster))) {
-          setClusterId(Number(hit.cluster));
-        } else {
+
+        if (!cancelled) {
+          setTasteMapPoints([]);
           setClusterId(null);
         }
-      } catch (e) {
-        console.error("ProductPage: クラスタ取得に失敗:", e);
-        if (!cancelled) setClusterId(null);
       }
     };
 
-    findCluster();
+    loadTasteMapPoints();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [jan_code]);
 
@@ -1247,6 +1402,132 @@ export default function ProductPage() {
       alert(`追加に失敗: ${e?.message || e}`);
     } finally {
       setAdding(false);
+    }
+  };
+
+  /** =========================
+   *  調整したbubble値から最近傍商品を探し、
+   *  その商品のUMAP座標へピンを打つ
+   * ========================= */
+  const handlePinAdjustedTasteToMap = () => {
+    if (movingToMap) return;
+
+    if (!Array.isArray(tasteMapPoints) || tasteMapPoints.length === 0) {
+      alert(
+        "風味データの読み込みが完了していません。少し待ってからもう一度お試しください。"
+      );
+      return;
+    }
+
+    const nearest = findNearestWineByBubble(
+      tasteMapPoints,
+      {
+        body: bubbleBody,
+        sweetness: bubbleSweetness,
+        acid: bubbleAcid,
+      }
+    );
+
+    if (!nearest) {
+      alert(
+        "調整した味わいに対応する商品を見つけられませんでした。"
+      );
+      return;
+    }
+
+    const pinPayload = {
+      // MapPageが使用するUMAP座標
+      coordsUMAP: [
+        nearest.umapX,
+        nearest.umapY,
+      ],
+
+      // 保存形式の識別
+      version: 1,
+      source: "product-bubble",
+      createdAt: Date.now(),
+
+      // 調整元の商品
+      referenceJan: String(jan_code),
+
+      // ユーザーが調整した値
+      bubbleValues: {
+        bubble_1: Number(bubbleBody),
+        bubble_2: Number(bubbleSweetness),
+        bubble_3: Number(bubbleAcid),
+      },
+
+      // bubble空間で最近傍となった商品
+      nearestJan: nearest.jan,
+
+      // 最近傍商品の実際のbubble値
+      nearestBubbleValues: {
+        bubble_1: nearest.bubble1,
+        bubble_2: nearest.bubble2,
+        bubble_3: nearest.bubble3,
+      },
+    };
+
+    try {
+      localStorage.setItem(
+        "userPinCoords",
+        JSON.stringify(pinPayload)
+      );
+    } catch (e) {
+      console.error(
+        "ProductPage: userPinCoords 保存失敗:",
+        e
+      );
+      alert("MAPのピン情報を保存できませんでした。");
+      return;
+    }
+
+    setMovingToMap(true);
+
+    // 親のMapPageへも通知
+    postToParent({
+      type: "PRODUCT_BUBBLE_PIN_CREATED",
+      jan: nearest.jan,
+      coordsUMAP: pinPayload.coordsUMAP,
+      payload: pinPayload,
+    });
+
+    try {
+      const bc = new BroadcastChannel("product_bridge");
+      bc.postMessage({
+        type: "PRODUCT_BUBBLE_PIN_CREATED",
+        jan: nearest.jan,
+        coordsUMAP: pinPayload.coordsUMAP,
+        payload: pinPayload,
+        at: Date.now(),
+      });
+      bc.close();
+    } catch {}
+
+    /*
+     * ProductPageはMapPage内のiframeとして表示されているため、
+     * 親ウィンドウのHashRouterをMAP表示へ戻す。
+     */
+    try {
+      if (
+        window.parent &&
+        window.parent !== window
+      ) {
+        window.parent.location.hash =
+          "#/map?open=position";
+      } else {
+        window.location.hash =
+          "#/map?open=position";
+      }
+    } catch (e) {
+      console.warn(
+        "ProductPage: 親MAPへの遷移失敗:",
+        e
+      );
+
+      // iframe外で開かれた場合などのフォールバック
+      window.location.hash =
+        "#/map?open=position";
     }
   };
 
@@ -1577,6 +1858,46 @@ export default function ProductPage() {
             </div>
           </div>
         ))}
+
+        <button
+          type="button"
+          onClick={handlePinAdjustedTasteToMap}
+          disabled={
+            movingToMap ||
+            tasteMapPoints.length === 0
+          }
+          style={{
+            marginTop: 22,
+            width: "100%",
+            padding: "13px 16px",
+            background:
+              movingToMap || tasteMapPoints.length === 0
+                ? "#d8d8d8"
+                : "rgb(230,227,219)",
+            color: "#000",
+            border: "none",
+            borderRadius: 10,
+            fontSize: 16,
+            fontWeight: 700,
+            lineHeight: 1.3,
+            cursor:
+              movingToMap || tasteMapPoints.length === 0
+                ? "default"
+                : "pointer",
+            boxShadow:
+              movingToMap || tasteMapPoints.length === 0
+                ? "none"
+                : "0 4px 10px rgba(0,0,0,0.15)",
+            opacity:
+              movingToMap || tasteMapPoints.length === 0
+                ? 0.7
+                : 1,
+          }}
+        >
+          {movingToMap
+            ? "MAPを表示しています…"
+            : "この調整でMAPにピンを打つ"}
+        </button>        
       </div>
 
       {/* 説明＋基本情報 */}

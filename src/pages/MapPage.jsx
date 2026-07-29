@@ -326,7 +326,7 @@ const showAllowedJansErrorOnce = () => {
   if (allowedJansErrorShown) return;
   allowedJansErrorShown = true;
   try {
-    alert("allowed-jans の取得に失敗しました。表示点が一時的に減ることがあります。再読み込みしてください。");
+    alert("allowed-jans の取得に失敗しました。表示点が一時的に増減します。再読み込みしてください。");
   } catch (e) {
     console.warn("allowed-jans error (alert failed)", e);
   }
