@@ -1537,7 +1537,7 @@ export default function ProductPage() {
                 width: 48,
                 flexShrink: 0,
                 fontSize: 14,
-                fontWeight: 200,
+                fontWeight: 400,
                 color: "#555",
               }}
             >
@@ -1568,7 +1568,7 @@ export default function ProductPage() {
                 flexShrink: 0,
                 textAlign: "right",
                 fontSize: 14,
-                fontWeight: 200,
+                fontWeight: 400,
                 color: "#555",
                 fontVariantNumeric: "tabular-nums",
               }}
