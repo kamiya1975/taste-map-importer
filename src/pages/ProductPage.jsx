@@ -454,6 +454,24 @@ function normalizeBubbleValue(value) {
 }
 
 /** =========================
+ *  ProductPage用スライダーの進捗色
+ * ========================= */
+function productTasteSliderGradient(value) {
+  const normalizedValue = Math.min(
+    100,
+    Math.max(0, Number(value) || 0)
+  );
+
+  return `linear-gradient(
+    to right,
+    #b99778 0%,
+    #b99778 ${normalizedValue}%,
+    #e6e6e6 ${normalizedValue}%,
+    #e6e6e6 100%
+  )`;
+}
+
+/** =========================
  *  商品説明セクション
  * ========================= */
 function ProductInfoSection({ product, jan_code }) {
@@ -1510,16 +1528,17 @@ export default function ProductPage() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 10,
-              marginTop: index === 0 ? 0 : 14,
+              gap: 12,
+              marginTop: index === 0 ? 0 : 16,
             }}
           >
             <div
               style={{
                 width: 48,
                 flexShrink: 0,
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: 600,
+                color: "#555",
               }}
             >
               {slider.label}
@@ -1535,19 +1554,22 @@ export default function ProductPage() {
                 slider.onChange(Number(e.target.value));
               }}
               aria-label={slider.label}
+              className="product-taste-slider"
               style={{
                 flex: 1,
                 minWidth: 0,
-                cursor: "pointer",
+                "--range": productTasteSliderGradient(slider.value),
               }}
             />
 
             <div
               style={{
-                width: 32,
+                width: 36,
                 flexShrink: 0,
                 textAlign: "right",
-                fontSize: 14,
+                fontSize: 18,
+                fontWeight: 600,
+                color: "#555",
                 fontVariantNumeric: "tabular-nums",
               }}
             >
