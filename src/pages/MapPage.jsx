@@ -2926,7 +2926,7 @@ function MapPage() {
           pointerEvents: "auto",
         }}
       >
-        {/* セレクタ */}
+        {/* セレクタ */}{/* 本番用は pc値参照だが 輸入元用は bubble値参照 */}
         <div style={{ position: "relative", display: "inline-block" }}>
           <select
             value={highlight2D}
@@ -2945,9 +2945,9 @@ function MapPage() {
             }}
           >
             <option value="">基本マップ</option>
-            <option value="pc3">酸味</option>
-            <option value="pc2">甘味</option>
-            <option value="pc1">ボディ</option>
+            <option value="bubble_3">酸味</option>
+            <option value="bubble_2">甘味</option>
+            <option value="bubble_1">ボディ</option>
           </select>
           <span
             aria-hidden="true"
