@@ -2358,8 +2358,9 @@ function MapPage() {
     return Number.isFinite(cid) ? cid : null;
   }, [userPin, data, findNearestWineWorld]);
 
+  //---------------------------------------------------------------------------------
   ////2026.07.イベント後修正（スライダー後アクセスログ追加）　以下1セクション追加
-  // スライダー確定後ログ
+  // 基準酒スライダー確定後ログ送信
   // SliderPageでは送信せず、MapPageで実際に表示する clusterId が確定してから送信する。
   useEffect(() => {
     if (!isTastePositionOpen) return;
@@ -2489,8 +2490,217 @@ function MapPage() {
     tastePositionClusterId,
     location.search,
   ]);
-  ////ここまで
 
+  //---------------------------------------------------------------------------------
+  ////2026.08. 以下1セクション追加
+  // 商品詳細スライダー確定後ログ送信
+  // ProductPageでは直接送信せず、MapPageで実際に表示する clusterId が確定してから送信する。
+  useEffect(() => {
+    if (!isTastePositionOpen) return;
+    if (!userPin) return;
+    if (tastePositionClusterId == null) return;
+
+    const sliderPayload = readUserPinPayloadFromStorage();
+    if (!sliderPayload) return;
+
+    // 基準酒スライダーとは分離
+    if (sliderPayload.source !== "product_slider") return;
+    if (!sliderPayload.createdAt) return;
+
+    const createdAt = String(sliderPayload.createdAt);
+    const currentState =
+      productSliderLogStateRef.current.get(createdAt);
+
+    // React再描画・effect再実行による同一操作の重複送信を防ぐ
+    if (
+      currentState === "sending" ||
+      currentState === "sent" ||
+      currentState === "failed"
+    ) {
+      return;
+    }
+
+    // 操作元の商品JAN
+    const referenceJan = String(
+      sliderPayload.referenceJan || ""
+    ).trim();
+
+    const coords = Array.isArray(sliderPayload.coordsUMAP)
+      ? sliderPayload.coordsUMAP
+      : [];
+
+    const umapX = Number(coords[0]);
+    const umapY = Number(coords[1]);
+
+    // 操作元商品が元々持っているbubble値
+    // 元データが欠損の場合はNULLのまま送る
+    const bubbleValues = sliderPayload.bubbleValues || {};
+
+    const normalizeOptionalNumber = (value) => {
+      if (
+        value === null ||
+        value === undefined ||
+        value === ""
+      ) {
+        return null;
+      }
+
+      const n = Number(value);
+
+      return Number.isFinite(n)
+        ? n
+        : null;
+    };
+
+    const bubble1 = normalizeOptionalNumber(
+      bubbleValues.bubble_1
+    );
+    const bubble2 = normalizeOptionalNumber(
+      bubbleValues.bubble_2
+    );
+    const bubble3 = normalizeOptionalNumber(
+      bubbleValues.bubble_3
+    );
+
+    // ボタン押下時点の調整後bubble値
+    const sliderValues = sliderPayload.sliderValues || {};
+
+    const normalizeSliderValue = (value) => {
+      const n = Number(value);
+
+      if (
+        !Number.isFinite(n) ||
+        n < 0 ||
+        n > 100
+      ) {
+        return null;
+      }
+
+      return Math.round(n);
+    };
+
+    const slider1Value = normalizeSliderValue(
+      sliderValues.slider_1_value
+    );
+    const slider2Value = normalizeSliderValue(
+      sliderValues.slider_2_value
+    );
+    const slider3Value = normalizeSliderValue(
+      sliderValues.slider_3_value
+    );
+
+    // 必須項目が不正なら送らない
+    // bubble_1～3は元データ欠損時にNULLを許容する
+    if (
+      !referenceJan ||
+      !Number.isFinite(umapX) ||
+      !Number.isFinite(umapY) ||
+      slider1Value == null ||
+      slider2Value == null ||
+      slider3Value == null
+    ) {
+      productSliderLogStateRef.current.set(
+        createdAt,
+        "failed"
+      );
+      return;
+    }
+
+    const nearestJan = sliderPayload.nearestJan
+      ? String(sliderPayload.nearestJan)
+      : null;
+
+    const searchText =
+      getSearchTextForHashRouter(location.search);
+
+    const sendOnce = async () => {
+      productSliderLogStateRef.current.set(
+        createdAt,
+        "sending"
+      );
+
+      try {
+        await sendAccessLog({
+          event_type: "product_slider",
+
+          // standard_sliderのような"slider"固定ではなく、
+          // 操作元商品の実JANを保存する
+          jan_code: referenceJan,
+
+          search: searchText,
+          throwOnError: true,
+          extra: {
+            nearest_jan: nearestJan,
+            umap_x: umapX,
+            umap_y: umapY,
+
+            // PC値は送信しないためDBではNULL
+            // 操作元商品の元々のbubble値
+            bubble_1: bubble1,
+            bubble_2: bubble2,
+            bubble_3: bubble3,
+
+            // ボタン押下時点の調整後bubble値
+            slider_1_value: slider1Value,
+            slider_2_value: slider2Value,
+            slider_3_value: slider3Value,
+
+            // MapPageで実際に表示したクラスター
+            cluster_at_event: Number(
+              tastePositionClusterId
+            ),
+          },
+        });
+
+        productSliderLogStateRef.current.set(
+          createdAt,
+          "sent"
+        );
+        return true;
+      } catch (e) {
+        console.warn(
+          "[product-slider-log] send failed:",
+          e
+        );
+        return false;
+      }
+    };
+
+    let cancelled = false;
+
+    (async () => {
+      const ok = await sendOnce();
+      if (ok || cancelled) return;
+
+      // 通信揺らぎ対策
+      // 1回失敗した場合のみ1秒後に1回だけ再送
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1000)
+      );
+
+      if (cancelled) return;
+
+      const retryOk = await sendOnce();
+
+      if (!retryOk) {
+        productSliderLogStateRef.current.set(
+          createdAt,
+          "failed"
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isTastePositionOpen,
+    userPin,
+    tastePositionClusterId,
+    location.search,
+  ]);
+
+  //---------------------------------------------------------------------------------
   // スライダー直後：最寄り自動オープン
   useEffect(() => {
     const wantAutoOpen =

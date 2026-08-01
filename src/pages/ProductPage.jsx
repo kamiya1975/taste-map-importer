@@ -1435,6 +1435,8 @@ export default function ProductPage() {
       return;
     }
 
+    const productSliderCreatedAt = new Date().toISOString();
+
     const pinPayload = {
       // MapPageが使用するUMAP座標
       coordsUMAP: [
@@ -1443,24 +1445,34 @@ export default function ProductPage() {
       ],
 
       // 保存形式の識別
-      version: 1,
-      source: "product-bubble",
-      createdAt: Date.now(),
+      version: 5,
+      source: "product_slider",
+      createdAt: productSliderCreatedAt,
 
-      // 調整元の商品
+      // スライダー操作元の商品JAN
       referenceJan: String(jan_code),
 
-      // ユーザーが調整した値
+      // 操作元商品が元々持っているbubble値
+      // 欠損値を画面初期値50へ置き換えず、NULL相当のまま保持する
       bubbleValues: {
-        bubble_1: Number(bubbleBody),
-        bubble_2: Number(bubbleSweetness),
-        bubble_3: Number(bubbleAcid),
+        bubble_1: toFiniteNumber(product?.bubble_1),
+        bubble_2: toFiniteNumber(product?.bubble_2),
+        bubble_3: toFiniteNumber(product?.bubble_3),
       },
 
-      // bubble空間で最近傍となった商品
-      nearestJan: nearest.jan,
+      // ボタン押下時点の調整後bubble値
+      // DBではslider_1_value～slider_3_valueへ保存する
+      sliderValues: {
+        slider_1_value: Math.round(Number(bubbleBody)),
+        slider_2_value: Math.round(Number(bubbleSweetness)),
+        slider_3_value: Math.round(Number(bubbleAcid)),
+      },
+
+      // 調整後のbubble値から検索した最近傍商品
+      nearestJan: String(nearest.jan),
 
       // 最近傍商品の実際のbubble値
+      // 現状の情報として維持するが、アクセスログ送信には使用しない
       nearestBubbleValues: {
         bubble_1: nearest.bubble1,
         bubble_2: nearest.bubble2,
