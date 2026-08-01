@@ -914,8 +914,10 @@ function MapPage() {
   const routeJanCenteredRef = useRef("");
   const qrLandingLoggedRef = useRef(new Set());
   const qrUrlHandledRef = useRef("");
-  ////2026.07.イベント後修正（スライダー後アクセスログ追加）　以下1行追加
+  ////2026.07.イベント後修正（スライダー後アクセスログ追加）
   const standardSliderLogStateRef = useRef(new Map());
+  ////2026.08.（商品詳細スライダーアクセスログ追加）
+  const productSliderLogStateRef = useRef(new Map());
 
   // ---- Drawer 状態（すべて明示）（Ref群）----
   const [isMyPageOpen, setIsMyPageOpen] = useState(false); // アプリガイド（メニュー）
