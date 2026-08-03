@@ -1328,7 +1328,7 @@ export default function ProductPage() {
     product?.jan_code ||
     "（名称不明）";
 
-  // 2026.08.カートボタン非表示（EC商品かどうか）
+  //// 2026.08.カートボタン非表示（EC商品かどうか）
   // 商品説明・ECコメント等の判定には引き続き使用する
   const isEcContext = !!product?.is_ec_product;
   // 輸入元用アプリでは購入導線を表示しない
@@ -1343,11 +1343,13 @@ export default function ProductPage() {
   } else if (availableInSelected === true) {
     // 店名はバックの price_store_name に 1本化（価格表示の出典と一致させる）
     // 無い場合は「店舗」とする（誤表示ゼロ優先）
+    ////  この商品は「{storeLabel || "店舗"}」でお買い求めいただけます。
+    ////  在庫・価格は店頭にてご確認ください。
     const storeLabel = product?.price_store_name || "";
     availabilityLine = (
       <>
-        この商品は「{storeLabel || "店舗"}」でお買い求めいただけます。
-        在庫・価格は店頭にてご確認ください。
+        この商品は「{storeLabel || "店舗"}」で扱っております。
+        表示価格は参考価格です。
       </>
     );
   } else if (availableInSelected === false) {
