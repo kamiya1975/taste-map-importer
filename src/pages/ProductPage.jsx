@@ -1328,15 +1328,18 @@ export default function ProductPage() {
     product?.jan_code ||
     "（名称不明）";
 
-  // EC商品かどうか　 is_ec_product で 1本化（これだけを真実にする）
+  // 2026.08.カートボタン非表示（EC商品かどうか）
+  // 商品説明・ECコメント等の判定には引き続き使用する
   const isEcContext = !!product?.is_ec_product;
-  const canShowCartButton = isEcContext;
+  // 輸入元用アプリでは購入導線を表示しない
+  const canShowCartButton = false;
 
   // 価格下の文言（EC / 店舗 / それ以外）
   // 店舗文言は「店名がある」ではなく「選択中店舗で取扱あり」のときだけ出す
   let availabilityLine = null;
   if (isEcContext) {
-    availabilityLine = <>この商品はネット購入できます。</>;
+    ////availabilityLine = <>この商品はネット購入できます。</>;
+    availabilityLine = <>表示価格は参考価格です。</>;
   } else if (availableInSelected === true) {
     // 店名はバックの price_store_name に 1本化（価格表示の出典と一致させる）
     // 無い場合は「店舗」とする（誤表示ゼロ優先）
