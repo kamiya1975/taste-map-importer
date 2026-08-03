@@ -1000,6 +1000,9 @@ function MapPage() {
   const [ecOnlyJansSet, setEcOnlyJansSet] = useState(() => new Set());
   const [storeJansSet, setStoreJansSet] = useState(() => new Set());
   const [cartEnabled, setCartEnabled] = useState(false);
+  ////2026.08.カートパネルボタン非表示 のため以下1行追加
+  // 輸入元用アプリでは購入導線を表示しない / EC・店舗文脈とカート機能自体は維持する
+  const canShowCartButton = false;
   const [wishJansSet, setWishJansSet] = useState(() => new Set());
   const [wishVersion, setWishVersion] = useState(0);
   // ↓↓↓ ここに追加 店舗QR用 ↓↓↓
@@ -1936,7 +1939,6 @@ function MapPage() {
     };
   }, [data]);
 
-  //---------------------------------------------------------------------------------
   //---------------------------------------------------------------------------------
   // 更新ボタン用 （打点JSONやバックグラウンド読み込みのため）
   // ====== 打点データ読み込み（初回）===== 2026.01.
@@ -3408,8 +3410,8 @@ function MapPage() {
         />
       </button>
 
-      {/* 右サイド: カート */}
-      {cartEnabled && (
+      {/* 右サイド: カート */}{/* 2026.08.カートパネルボタン非表示のため 以下1行変更 */}
+      {canShowCartButton && cartEnabled && (
       <button
         onClick={() => openPanel("cart")}
         style={{

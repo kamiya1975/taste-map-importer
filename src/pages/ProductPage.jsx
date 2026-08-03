@@ -1328,7 +1328,7 @@ export default function ProductPage() {
     product?.jan_code ||
     "（名称不明）";
 
-  //// 2026.08.カートボタン非表示（EC商品かどうか）
+  ////2026.08.カートボタン非表示 のため以下2つ追加（他表示文言も修正）
   // 商品説明・ECコメント等の判定には引き続き使用する
   const isEcContext = !!product?.is_ec_product;
   // 輸入元用アプリでは購入導線を表示しない
