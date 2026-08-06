@@ -15,6 +15,7 @@ import {
 } from "../lib/wineIngredientArrows";
 import {
   getClusterRGBA,
+  getClusterMeta,
   clusterRGBAtoCSS,
   toJapaneseWineType,
   TASTEMAP_POINTS_URL,
@@ -595,9 +596,20 @@ function ProductInfoSection({ product, jan_code }) {
     product.production_year_taste
   );
 
+  // クラスター
+  // バックエンドが返す pca_scores.cluster を使用し、
+  // 表示文言は constants.js の CLUSTER_META から取得する
+  const clusterNumber = toFiniteNumber(product.cluster);
+
+  const clusterName =
+    clusterNumber !== null
+      ? getClusterMeta(clusterNumber).name
+      : "—";
+
   const detailRows = [
     ["JAN", janValue],
     ["タイプ", toJapaneseWineType(product.wine_type)],
+    ["クラスター", clusterName],
     ["生産者名", product.producer_name || "—"],
     ["容量", product.volume_ml ? `${product.volume_ml}ml` : "—"],
     ["国", product.country || "—"],
