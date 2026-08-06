@@ -1534,29 +1534,26 @@ export default function ProductPage() {
     } catch {}
 
     /*
-     * ProductPageはMapPage内のiframeとして表示されているため、
-     * 親ウィンドウのHashRouterをMAP表示へ戻す。
+     * iframe内で表示されている場合は、
+     * PRODUCT_BUBBLE_PIN_CREATED を受け取ったMapPage側で
+     * ピン表示と最近傍商品の詳細表示を行う。
+     *
+     * iframe外で単独表示された場合だけMAPへ戻す。
      */
     try {
       if (
-        window.parent &&
-        window.parent !== window
+        !window.parent ||
+        window.parent === window
       ) {
-        window.parent.location.hash =
-          "#/map?open=position";
-      } else {
-        window.location.hash =
-          "#/map?open=position";
+        window.location.hash = "#/map";
       }
     } catch (e) {
       console.warn(
-        "ProductPage: 親MAPへの遷移失敗:",
+        "ProductPage: MAPへの遷移失敗:",
         e
       );
 
-      // iframe外で開かれた場合などのフォールバック
-      window.location.hash =
-        "#/map?open=position";
+      window.location.hash = "#/map";
     }
   };
 

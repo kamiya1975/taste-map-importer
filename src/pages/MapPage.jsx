@@ -991,6 +991,12 @@ function MapPage() {
   const [data, setData] = useState([]);
   const [userRatings, setUserRatings] = useState({});
   const [userPin, setUserPin] = useState(null);
+  // 商品詳細スライダー操作を、この画面表示中に受信したことを示すキー
+  // 古いlocalStorageデータによるログ再送を防ぐ
+  const [
+    productSliderLogTrigger,
+    setProductSliderLogTrigger,
+  ] = useState("");
   const [highlight2D, setHighlight2D] = useState("");
   const [selectedJAN, setSelectedJAN] = useState(null);
   const [productDrawerOpen, setProductDrawerOpen] = useState(false);
@@ -2500,7 +2506,10 @@ function MapPage() {
   // 商品詳細スライダー確定後ログ送信
   // ProductPageでは直接送信せず、MapPageで実際に表示する clusterId が確定してから送信する。
   useEffect(() => {
-    if (!isTastePositionOpen) return;
+    // このMapPage表示中に商品詳細スライダー操作を受信していない場合は送らない
+    // localStorageに残っている過去データの再送防止
+    if (!productSliderLogTrigger) return;
+
     if (!userPin) return;
     if (tastePositionClusterId == null) return;
 
@@ -2512,6 +2521,10 @@ function MapPage() {
     if (!sliderPayload.createdAt) return;
 
     const createdAt = String(sliderPayload.createdAt);
+
+    // 今回受信した操作と、localStorage上の操作が一致する場合だけ送信
+    if (createdAt !== productSliderLogTrigger) return;
+
     const currentState =
       productSliderLogStateRef.current.get(createdAt);
 
@@ -2698,7 +2711,7 @@ function MapPage() {
       cancelled = true;
     };
   }, [
-    isTastePositionOpen,
+    productSliderLogTrigger,
     userPin,
     tastePositionClusterId,
     location.search,
@@ -2907,6 +2920,81 @@ function MapPage() {
         return;
       }
 
+      // 商品詳細スライダー操作後
+      // 1. 調整位置へピンを表示
+      // 2. ピン位置へ地図を移動
+      // 3. 最近傍商品の詳細を開く
+      if (type === "PRODUCT_BUBBLE_PIN_CREATED") {
+        const payload =
+          msg.payload &&
+          typeof msg.payload === "object"
+            ? msg.payload
+            : {};
+
+        const nearestJan = String(
+          msg.jan ??
+          payload.nearestJan ??
+          ""
+        ).trim();
+
+        const coords = Array.isArray(msg.coordsUMAP)
+          ? msg.coordsUMAP
+          : Array.isArray(payload.coordsUMAP)
+            ? payload.coordsUMAP
+            : [];
+
+        const pinX = Number(coords[0]);
+        const pinY = Number(coords[1]);
+
+        if (
+          !nearestJan ||
+          !Number.isFinite(pinX) ||
+          !Number.isFinite(pinY)
+        ) {
+          console.warn(
+            "PRODUCT_BUBBLE_PIN_CREATED: 不正なpayload",
+            msg
+          );
+          return;
+        }
+
+        // 同一ウィンドウ内のlocalStorage更新ではstorageイベントが発火しないため、
+        // postMessage受信時にMapPageのstateへ直接反映する
+        setUserPin([pinX, pinY]);
+
+        // 初期位置への自動センタリングで上書きされないようにする
+        didInitialCenterRef.current = true;
+
+        // 商品詳細スライダーログ送信の発火キー
+        const createdAt = String(
+          payload.createdAt || ""
+        ).trim();
+
+        if (createdAt) {
+          setProductSliderLogTrigger(createdAt);
+        }
+
+        // visualViewportやDrawer切替時の表示揺れを抑える
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            centerToUMAP(
+              pinX,
+              pinY,
+              { zoom: INITIAL_ZOOM }
+            );
+          });
+        });
+
+        // 現在の商品詳細を閉じて、最近傍商品の詳細へ切り替える
+        // recenter:false により、直前に設定したピン中心位置を維持する
+        await openWine(nearestJan, {
+          zoom: INITIAL_ZOOM,
+          recenter: false,
+        });
+
+        return;
+      }
+
       const janStr = String(msg.jan ?? msg.jan_code ?? "");
       if (!janStr) return;
 
@@ -2993,6 +3081,8 @@ function MapPage() {
     cartEnabled,
     CHILD_ORIGIN,
     storeContextKey,
+    openWine,
+    centerToUMAP,
   ]);
 
   //---------------------------------------------------------------------------------
