@@ -2354,6 +2354,92 @@ function MapPage() {
     [data, storeJansSet]
   );
 
+  //---------------------------------------------------------------------------------
+  // 商品詳細スライダー用
+  // - 現在店舗の取扱商品だけを対象に、bubble空間の最近傍商品を取得
+  // - bubble_1 = ボディ
+  // - bubble_2 = 甘味
+  // - bubble_3 = 酸味
+  // 全商品JSONではなく storeJansSet に含まれる商品だけを候補にするため、
+  // 輸入元店舗で取り扱っていない他社商品は候補にならない。
+  const findNearestStoreWineByBubble = useCallback(
+    ({ body, sweetness, acid }) => {
+      if (!Array.isArray(data) || data.length === 0) {
+        return null;
+      }
+
+      if (
+        !(storeJansSet instanceof Set) ||
+        storeJansSet.size === 0
+      ) {
+        return null;
+      }
+
+      const targetBody = Number(body);
+      const targetSweetness = Number(sweetness);
+      const targetAcid = Number(acid);
+
+      if (
+        !Number.isFinite(targetBody) ||
+        !Number.isFinite(targetSweetness) ||
+        !Number.isFinite(targetAcid)
+      ) {
+        return null;
+      }
+
+      let nearest = null;
+      let minimumDistanceSquared = Infinity;
+
+      for (const row of data) {
+        const jan = String(getJanFromItem(row) || "").trim();
+
+        // 現在店舗の取扱商品以外は候補にしない
+        if (!jan || !storeJansSet.has(jan)) {
+          continue;
+        }
+
+        const bubble1 = Number(row?.bubble_1);
+        const bubble2 = Number(row?.bubble_2);
+        const bubble3 = Number(row?.bubble_3);
+        const umapX = Number(row?.umap_x);
+        const umapY = Number(row?.umap_y);
+
+        if (
+          !Number.isFinite(bubble1) ||
+          !Number.isFinite(bubble2) ||
+          !Number.isFinite(bubble3) ||
+          !Number.isFinite(umapX) ||
+          !Number.isFinite(umapY)
+        ) {
+          continue;
+        }
+
+        const distanceSquared =
+          (targetBody - bubble1) ** 2 +
+          (targetSweetness - bubble2) ** 2 +
+          (targetAcid - bubble3) ** 2;
+
+        if (distanceSquared < minimumDistanceSquared) {
+          minimumDistanceSquared = distanceSquared;
+
+          nearest = {
+            row,
+            jan,
+            umapX,
+            umapY,
+            bubble1,
+            bubble2,
+            bubble3,
+            distanceSquared,
+          };
+        }
+      }
+
+      return nearest;
+    },
+    [data, storeJansSet]
+  );
+
   // 「あなたの味覚位置パネル」表示用：userPin 近傍のクラスターIDを算出（UMAP近傍）
   const tastePositionClusterId = useMemo(() => {
     if (!userPin || !Array.isArray(data) || data.length === 0) return null;
@@ -2927,54 +3013,120 @@ function MapPage() {
       if (type === "PRODUCT_BUBBLE_PIN_CREATED") {
         const payload =
           msg.payload &&
-          typeof msg.payload === "object"
+          typeof msg.payload === "object" &&
+          !Array.isArray(msg.payload)
             ? msg.payload
             : {};
 
-        const nearestJan = String(
-          msg.jan ??
-          payload.nearestJan ??
-          ""
-        ).trim();
+        /*
+         * ProductPageが送ったnearestJanは全商品JSON上の暫定値。
+         *
+         * MapPage側で、現在店舗の取扱商品だけを対象に
+         * bubble空間の最近傍を再計算して最終確定する。
+         */
+        const sliderValues = payload.sliderValues || {};
 
-        const coords = Array.isArray(msg.coordsUMAP)
-          ? msg.coordsUMAP
-          : Array.isArray(payload.coordsUMAP)
-            ? payload.coordsUMAP
-            : [];
-
-        const pinX = Number(coords[0]);
-        const pinY = Number(coords[1]);
+        const targetBody = Number(
+          sliderValues.slider_1_value
+        );
+        const targetSweetness = Number(
+          sliderValues.slider_2_value
+        );
+        const targetAcid = Number(
+          sliderValues.slider_3_value
+        );
 
         if (
-          !nearestJan ||
-          !Number.isFinite(pinX) ||
-          !Number.isFinite(pinY)
+          !Number.isFinite(targetBody) ||
+          !Number.isFinite(targetSweetness) ||
+          !Number.isFinite(targetAcid)
         ) {
           console.warn(
-            "PRODUCT_BUBBLE_PIN_CREATED: 不正なpayload",
+            "PRODUCT_BUBBLE_PIN_CREATED: スライダー値が不正です",
             msg
           );
           return;
         }
 
-        // 同一ウィンドウ内のlocalStorage更新ではstorageイベントが発火しないため、
-        // postMessage受信時にMapPageのstateへ直接反映する
+        const nearest =
+          findNearestStoreWineByBubble({
+            body: targetBody,
+            sweetness: targetSweetness,
+            acid: targetAcid,
+          });
+
+        if (!nearest) {
+          console.warn(
+            "PRODUCT_BUBBLE_PIN_CREATED: 店舗取扱商品内に最近傍候補がありません",
+            {
+              storeJansCount:
+                storeJansSet instanceof Set
+                  ? storeJansSet.size
+                  : 0,
+              sliderValues,
+            }
+          );
+
+          alert(
+            "現在の店舗取扱商品の中から、調整した味わいに対応する商品を見つけられませんでした。"
+          );
+          return;
+        }
+
+        const nearestJan = String(nearest.jan);
+        const pinX = Number(nearest.umapX);
+        const pinY = Number(nearest.umapY);
+
+        /*
+         * ProductPageが保存した全商品ベースの値を、
+         * 店舗取扱商品内で再計算した最終値へ上書きする。
+         *
+         * 商品詳細スライダーログもこの保存値を参照するため、
+         * nearest_jan・UMAP座標・最近傍bubble値が最終結果と一致する。
+         */
+        const correctedPayload = {
+          ...payload,
+          coordsUMAP: [pinX, pinY],
+          nearestJan,
+          nearestBubbleValues: {
+            bubble_1: nearest.bubble1,
+            bubble_2: nearest.bubble2,
+            bubble_3: nearest.bubble3,
+          },
+        };
+
+        try {
+          localStorage.setItem(
+            "userPinCoords",
+            JSON.stringify(correctedPayload)
+          );
+        } catch (e) {
+          console.error(
+            "MapPage: 店舗取扱商品内のピン情報保存に失敗:",
+            e
+          );
+
+          alert("MAPのピン情報を保存できませんでした。");
+          return;
+        }
+
+        // 同一ウィンドウ内のlocalStorage更新では
+        // storageイベントが発火しないため、stateへ直接反映
         setUserPin([pinX, pinY]);
 
-        // 初期位置への自動センタリングで上書きされないようにする
+        // 初期位置への自動センタリングによる上書きを防ぐ
         didInitialCenterRef.current = true;
 
-        // 商品詳細スライダーログ送信の発火キー
+        // 修正済みpayloadを保存した後でログ送信を発火
         const createdAt = String(
-          payload.createdAt || ""
+          correctedPayload.createdAt || ""
         ).trim();
 
         if (createdAt) {
           setProductSliderLogTrigger(createdAt);
         }
 
-        // visualViewportやDrawer切替時の表示揺れを抑える
+        // 店舗取扱商品内で確定した最近傍商品の位置へ移動
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             centerToUMAP(
@@ -2985,8 +3137,8 @@ function MapPage() {
           });
         });
 
-        // 現在の商品詳細を閉じて、最近傍商品の詳細へ切り替える
-        // recenter:false により、直前に設定したピン中心位置を維持する
+        // 最近傍商品の詳細へ切り替える
+        // recenter:false で、直前に設定したピン中心位置を維持する
         await openWine(nearestJan, {
           zoom: INITIAL_ZOOM,
           recenter: false,
@@ -3083,6 +3235,8 @@ function MapPage() {
     storeContextKey,
     openWine,
     centerToUMAP,
+    findNearestStoreWineByBubble,
+    storeJansSet,
   ]);
 
   //---------------------------------------------------------------------------------
