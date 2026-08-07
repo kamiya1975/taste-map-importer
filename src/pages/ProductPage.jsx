@@ -1352,19 +1352,6 @@ export default function ProductPage() {
   // true ：希望小売価格（税抜・輸入元登録値）
   const importerRetailPrice = !!product?.importer_retail_price;
 
-  // APIが返した最終表示価格に、価格種別の文言を付ける
-  let displayPriceLine = null;
-
-  if (displayPrice) {
-    if (isEcContext) {
-      displayPriceLine = `EC販売価格：${displayPrice}（税込）`;
-    } else if (importerRetailPrice) {
-      displayPriceLine = `希望小売価格 ${displayPrice}（税抜）`;
-    } else {
-      displayPriceLine = `店舗販売価格：${displayPrice}（税込）`;
-    }
-  }
-
   // 輸入元用アプリでは購入導線を表示しない
   const canShowCartButton = false;
 
@@ -1372,8 +1359,7 @@ export default function ProductPage() {
   // 店舗文言は「店名がある」ではなく「選択中店舗で取扱あり」のときだけ出す
   let availabilityLine = null;
   if (isEcContext) {
-    ////availabilityLine = <>この商品はネット購入できます。</>;
-    availabilityLine = <>表示価格は参考価格です。</>;
+    availabilityLine = <>この商品はネット購入できます。</>;
   } else if (availableInSelected === true) {
     // 店名はバックの price_store_name に 1本化（価格表示の出典と一致させる）
     // 無い場合は「店舗」とする（誤表示ゼロ優先）
@@ -1638,15 +1624,52 @@ export default function ProductPage() {
           }}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 600,
-              lineHeight: 1.4,
-            }}
-          >
-            {displayPriceLine || null}
-          </div>
+          {displayPrice && (
+            <div
+              style={{
+                lineHeight: 1.4,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#666",
+                }}
+              >
+                {isEcContext
+                  ? "EC販売価格："
+                  : importerRetailPrice
+                  ? "希望小売価格 "
+                  : "店舗販売価格："}
+              </span>
+
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: "#333",
+                }}
+              >
+                {displayPrice}
+              </span>
+
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "#666",
+                }}
+              >
+                {isEcContext
+                  ? "（税込）"
+                  : importerRetailPrice
+                  ? "（税抜）"
+                  : "（税込）"}
+              </span>
+            </div>
+          )}
 
           {availabilityLine && (
             <div
