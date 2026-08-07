@@ -1319,10 +1319,13 @@ export default function ProductPage() {
   // 価格・タイプ色などの表示用
   const price = product?.price_inc_tax;
   const priceNum =
-    price === null || price === undefined || price === "" ? null : Number(price);
+    price === null || price === undefined || price === ""
+      ? null
+      : Number(price);
+
   const displayPrice =
     priceNum !== null && Number.isFinite(priceNum)
-      ? `¥${priceNum.toLocaleString()}`
+      ? `${priceNum.toLocaleString()}円`
       : null;
 
   // 選択中店舗にアクティブ取扱があるか（※EC判定には使わない。availabilityLineの「評価履歴」表示用）
@@ -1343,6 +1346,25 @@ export default function ProductPage() {
   ////2026.08.カートボタン非表示 のため以下2つ追加（他表示文言も修正）
   // 商品説明・ECコメント等の判定には引き続き使用する
   const isEcContext = !!product?.is_ec_product;
+
+  // 店舗の価格参照設定
+  // false：店舗販売価格（税込）
+  // true ：希望小売価格（税抜・輸入元登録値）
+  const importerRetailPrice = !!product?.importer_retail_price;
+
+  // APIが返した最終表示価格に、価格種別の文言を付ける
+  let displayPriceLine = null;
+
+  if (displayPrice) {
+    if (isEcContext) {
+      displayPriceLine = `EC販売価格：${displayPrice}（税込）`;
+    } else if (importerRetailPrice) {
+      displayPriceLine = `希望小売価格 ${displayPrice}（税抜）`;
+    } else {
+      displayPriceLine = `店舗販売価格：${displayPrice}（税込）`;
+    }
+  }
+
   // 輸入元用アプリでは購入導線を表示しない
   const canShowCartButton = false;
 
@@ -1361,7 +1383,6 @@ export default function ProductPage() {
     availabilityLine = (
       <>
         この商品は「{storeLabel || "店舗"}」で扱っております。
-        表示価格は参考価格です。
       </>
     );
   } else if (availableInSelected === false) {
@@ -1624,7 +1645,7 @@ export default function ProductPage() {
               lineHeight: 1.4,
             }}
           >
-            {displayPrice || null}
+            {displayPriceLine || null}
           </div>
 
           {availabilityLine && (
